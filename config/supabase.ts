@@ -4,12 +4,13 @@ import { AppState, Platform } from 'react-native';
 import 'react-native-url-polyfill/auto';
 
 
-const supabaseURL ='https://lgdkhhrxtjbuijcnqvyr.supabase.co';
+const supabaseURL = 'https://lgdkhhrxtjbuijcnqvyr.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnZGtoaHJ4dGpidWlqY25xdnlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyODMzNzQsImV4cCI6MjA3OTg1OTM3NH0.0CLlx1GPRwR48yNOCcVfyUJpsWY2MmVdk7JrvDvWbaI';
+const supabaseServiceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnZGtoaHJ4dGpidWlqY25xdnlyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDI4MzM3NCwiZXhwIjoyMDc5ODU5Mzc0fQ.mDhjbcRMHwfXRi9_D0Z-1IPnsBT8BC3bNucsAniSsyM';
 
-export const supabase = createClient(supabaseURL,supabaseAnonKey,{
-    auth:{
-        ...(Platform.OS !== "web" ? {storage: AsyncStorage}:{}),
+export const supabase = createClient(supabaseURL, supabaseServiceKey, {
+    auth: {
+        ...(Platform.OS !== "web" ? { storage: AsyncStorage } : {}),
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: false,
@@ -17,11 +18,11 @@ export const supabase = createClient(supabaseURL,supabaseAnonKey,{
     },
 });
 
-if(Platform.OS !== "web"){
-    AppState.addEventListener('change',(state)=>{
-        if(state==='active'){
+if (Platform.OS !== "web") {
+    AppState.addEventListener('change', (state) => {
+        if (state === 'active') {
             supabase.auth.startAutoRefresh()
-        }else{
+        } else {
             supabase.auth.stopAutoRefresh()
         }
     })

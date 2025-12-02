@@ -21,9 +21,9 @@ const AppLayout = () => {
 
     // segments[0] nos dice en qué "grupo" de rutas estamos
     const inAuthGroup = segments[0] === '(tabs)';
-    
+
     // Si cambias el nombre del archivo a index.tsx, la ruta sería "/Login"
-    const inLoginRoute = segments[0] === 'login'; 
+    const inLoginRoute = segments[0] === 'login';
 
     if (!user && !inLoginRoute) {
       // Si no hay usuario y no estás en la pantalla de login, ¡fuera!
@@ -47,14 +47,13 @@ const AppLayout = () => {
       <Stack>
         {/* Tus pantallas principales (protegidas) */}
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        
+
         {/* Tu pantalla de Login (pública) */}
         {/* OJO: Debe coincidir con el nombre de tu carpeta "login" */}
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-        
+        <Stack.Screen name="login/index" options={{ headerShown: false }} />
+
         {/* Modales u otras pantallas */}
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
