@@ -50,3 +50,26 @@ export interface Appointment {
         last_name: string;
     } | null;
 }
+
+export interface MedicalHistory {
+    id: string;
+    allergies: string[];
+    blood_type: string;
+    chronic_conditions: string[];
+}
+
+export interface TriageRecord {
+    id: string;
+    systolic_pressure: number;
+    diastolic_pressure: number;
+    weight_kg: number;
+    temperature: number;
+    heart_rate: number;
+    oxygen_saturation: number;
+}
+
+export interface GeneralConsultation {
+    id: string;
+    current_illness: string;
+    family_history: string;
+}

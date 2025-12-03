@@ -1,3 +1,5 @@
+import { supabase } from '@/config/supabase';
+import { GeneralConsultation, LabResult, MedicalHistory, NeurologyAssessment, PatientProfile, TriageRecord } from '@/types/medical';
 import {
     Activity,
     Brain,
@@ -58,12 +60,14 @@ const JsonResultsTable = ({ data }: { data: Record<string, any> }) => {
 
 export default function ClinicalCaseDetail({ caseId, patientId, onClose }: any) {
     const [loading, setLoading] = useState(true);
-    const [patient, setPatient] = useState<any>(null);
-    const [labResults, setLabResults] = useState<any[]>([]);
+    const [patient, setPatient] = useState<PatientProfile | null>(null);
+    const [history, setHistory] = useState<MedicalHistory | null>(null);
+    const [triage, setTriage] = useState<TriageRecord | null>(null);
+    const [labResults, setLabResults] = useState<LabResult[]>([]);
 
     // Estado de Formularios
-    const [anamnesis, setAnamnesis] = useState({ current_illness: '', family_history: '' });
-    const [neuroAssessment, setNeuroAssessment] = useState({
+    const [anamnesis, setAnamnesis] = useState<GeneralConsultation>({ id: '', current_illness: '', family_history: '' });
+    const [neuroAssessment, setNeuroAssessment] = useState<NeurologyAssessment>({
         has_chorea: false,
         uhdrs_motor_score: '',
         mmse_score: '',
@@ -80,56 +84,129 @@ export default function ClinicalCaseDetail({ caseId, patientId, onClose }: any) 
     const [aiThinking, setAiThinking] = useState(false);
     const [aiOptions, setAiOptions] = useState<{ gpt: string, copilot: string } | null>(null);
 
-    // Cargar datos (Simulación de Fetch)
+    // Cargar datos
     useEffect(() => {
         const loadData = async () => {
-            // AQUÍ HARÍAS LOS SELECT REALES A SUPABASE
-            // const { data } = await supabase.from('profiles').select('*').eq('id', patientId).single();
+            try {
+                setLoading(true);
 
-            // Datos Mock para el ejemplo visual
-            setTimeout(() => {
-                setPatient({
-                    first_name: 'Carlos', last_name: 'Ruiz', phone: '+51 987 654 321',
-                    dni: '45678901', avatar_url: 'https://i.pravatar.cc/150?img=11'
-                });
-                setLabResults([
-                    {
-                        id: 'l1', type: 'Hemograma Completo', description: 'Análisis de sangre rutinario para descartar carencias.',
-                        result_text: 'Niveles normales de vitaminas B12 y D. Sin anemia.',
-                        analyzed_at: '2024-11-20',
-                        results_json: { "Hemoglobina": "14.5 g/dL", "Leucocitos": "6.5 K/uL", "Plaquetas": "250 K/uL", "Vitamina_B12": "500 pg/mL" }
-                    },
-                    {
-                        id: 'l2', type: 'Genético HTT', description: 'Conteo de repeticiones CAG en gen HTT.',
-                        result_text: 'Positivo para Alelo Expandido. Rango de penetrancia completa.',
-                        analyzed_at: '2024-11-25',
-                        results_json: { "Alelo_1": "18 repeticiones", "Alelo_2": "42 repeticiones", "Laboratorio": "GenLab Peru", "Metodo": "PCR-TP" }
-                    }
+                // 1. Perfil del Paciente
+                const patientPromise = supabase.from('profiles').select('*').eq('id', patientId).single();
+
+                // 2. Historial Médico
+                const historyPromise = supabase.from('medical_histories').select('*').eq('patient_id', patientId).single();
+
+                // 3. Triaje (Asociado al caso)
+                const triagePromise = supabase.from('triage_records').select('*').eq('case_id', caseId).order('created_at', { ascending: false }).limit(1).single();
+
+                // 4. Anamnesis (General Consultation asociada al caso)
+                const anamnesisPromise = supabase.from('general_consultations').select('*').eq('case_id', caseId).single();
+
+                // 5. Resultados de Laboratorio
+                const labsPromise = supabase.from('lab_results').select('*').eq('case_id', caseId);
+
+                // 6. Evaluación Neurológica
+                const neuroPromise = supabase.from('neurology_assessments').select('*').eq('case_id', caseId).single();
+
+                const [patientRes, historyRes, triageRes, anamnesisRes, labsRes, neuroRes] = await Promise.all([
+                    patientPromise, historyPromise, triagePromise, anamnesisPromise, labsPromise, neuroPromise
                 ]);
-                setAnamnesis({
-                    current_illness: 'Paciente refiere movimientos involuntarios en extremidades superiores desde hace 6 meses. Aumentan con estrés.',
-                    family_history: 'Padre diagnosticado con Huntington a los 50 años.'
-                });
+
+                if (patientRes.data) setPatient(patientRes.data);
+                if (historyRes.data) setHistory(historyRes.data);
+                if (triageRes.data) setTriage(triageRes.data);
+                if (anamnesisRes.data) setAnamnesis(anamnesisRes.data);
+                if (labsRes.data) setLabResults(labsRes.data);
+                if (neuroRes.data) setNeuroAssessment(neuroRes.data);
+
+            } catch (error) {
+                console.error("Error loading clinical case data:", error);
+                Alert.alert("Error", "No se pudieron cargar todos los datos del caso.");
+            } finally {
                 setLoading(false);
-            }, 1000);
+            }
         };
-        loadData();
-    }, [caseId]);
+
+        if (caseId && patientId) {
+            loadData();
+        }
+    }, [caseId, patientId]);
 
     const toggleSection = (key: string) => {
         setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
     };
 
-    // Lógica de IA (Simulada)
+    // Guardar Anamnesis
+    const saveAnamnesis = async () => {
+        try {
+            const { error } = await supabase
+                .from('general_consultations')
+                .upsert({
+                    id: anamnesis.id || undefined, // Si tiene ID actualiza, si no crea (aunque debería existir por lógica de negocio, o crearse al inicio)
+                    case_id: caseId,
+                    // doctor_id: deberíamos obtenerlo del contexto, pero por ahora asumimos que ya existe o se maneja en backend
+                    current_illness: anamnesis.current_illness,
+                    family_history: anamnesis.family_history
+                });
+
+            if (error) throw error;
+            Alert.alert("Éxito", "Anamnesis guardada correctamente.");
+        } catch (error) {
+            console.error("Error saving anamnesis:", error);
+            Alert.alert("Error", "No se pudo guardar la anamnesis.");
+        }
+    };
+
+    // Guardar Evaluación Neurológica
+    const saveNeuroAssessment = async () => {
+        try {
+            // Necesitamos el doctor_id, idealmente vendría de props o context, 
+            // pero para este ejemplo asumiremos que el registro ya existe o se hace update.
+            // Si es insert, necesitaríamos el doctor_id.
+
+            const payload: any = {
+                case_id: caseId,
+                has_chorea: neuroAssessment.has_chorea,
+                uhdrs_motor_score: neuroAssessment.uhdrs_motor_score,
+                mmse_score: neuroAssessment.mmse_score,
+                clinical_notes: neuroAssessment.clinical_notes,
+                diagnosis: neuroAssessment.diagnosis
+            };
+
+            if (neuroAssessment.id) {
+                payload.id = neuroAssessment.id;
+            }
+
+            // Nota: Para un insert real necesitaríamos 'doctor_id'. 
+            // Aquí asumimos que actualizamos uno existente o que la RLS/Trigger lo maneja (o fallará si es nuevo sin doctor_id).
+            // Para simplificar, asumimos update de uno existente creado al iniciar el caso.
+
+            const { error } = await supabase
+                .from('neurology_assessments')
+                .upsert(payload);
+
+            if (error) throw error;
+            Alert.alert("Éxito", "Evaluación guardada correctamente.");
+        } catch (error) {
+            console.error("Error saving neuro assessment:", error);
+            Alert.alert("Error", "No se pudo guardar la evaluación.");
+        }
+    };
+
+    // Lógica de IA (Simulada por ahora, preparada para integración real)
     const consultAI = () => {
         setAiThinking(true);
         setAiOptions(null);
 
-        // Simulamos envío de JSON a las APIs
+        // Aquí iría la llamada real a tu API de IA pasando:
+        // - labResults
+        // - neuroAssessment (scores)
+        // - anamnesis
+
         setTimeout(() => {
             setAiOptions({
-                gpt: `Basado en los 42 CAG y UHDRS, el paciente presenta un estadio temprano de Enfermedad de Huntington. Se sugiere iniciar Tetrabenazina para controlar la corea leve y terapia ocupacional.`,
-                copilot: `Confirmación genética (42 CAG). El cuadro clínico motor coincide. Diagnóstico: Enfermedad de Huntington. Plan recomendado: Enfoque multidisciplinario y evaluación psiquiátrica preventiva.`
+                gpt: `Basado en los resultados genéticos (si los hubiera) y el puntaje UHDRS de ${neuroAssessment.uhdrs_motor_score || 'N/A'}, el paciente podría presentar signos compatibles con Enfermedad de Huntington. Se sugiere correlacionar con antecedentes familiares.`,
+                copilot: `Evaluación clínica sugiere compromiso motor. Si el test genético confirma repeticiones CAG elevadas, el diagnóstico es consistente. Recomiendo seguimiento psiquiátrico.`
             });
             setAiThinking(false);
         }, 2500);
@@ -149,14 +226,14 @@ export default function ClinicalCaseDetail({ caseId, patientId, onClose }: any) 
             <View style={styles.header}>
                 <TouchableOpacity onPress={onClose} style={styles.closeBtn}><X size={24} color="#fff" /></TouchableOpacity>
                 <View style={styles.patientHeader}>
-                    <Image source={{ uri: patient.avatar_url }} style={styles.avatar} />
+                    <Image source={{ uri: patient?.avatar_url || 'https://i.pravatar.cc/150' }} style={styles.avatar} />
                     <View>
-                        <Text style={styles.patientName}>{patient.first_name} {patient.last_name}</Text>
+                        <Text style={styles.patientName}>{patient?.first_name} {patient?.last_name}</Text>
                         <View style={styles.phoneRow}>
                             <Phone size={14} color="#cbd5e1" />
-                            <Text style={styles.patientPhone}>{patient.phone}</Text>
+                            <Text style={styles.patientPhone}>{patient?.phone || 'Sin teléfono'}</Text>
                         </View>
-                        <Text style={styles.patientDni}>DNI: {patient.dni}</Text>
+                        <Text style={styles.patientDni}>DNI: {patient?.dni || '---'}</Text>
                     </View>
                 </View>
             </View>
@@ -165,18 +242,22 @@ export default function ClinicalCaseDetail({ caseId, patientId, onClose }: any) 
 
                 {/* 1. Historial Médico (Read Only) */}
                 <Accordion title="Historial Médico General" icon={FileText} isOpen={openSections['history']} onToggle={() => toggleSection('history')} color="#64748b">
-                    <Text style={styles.readOnlyText}>• Alergias: Penicilina</Text>
-                    <Text style={styles.readOnlyText}>• Tipo de Sangre: O+</Text>
-                    <Text style={styles.readOnlyText}>• Condiciones: Ninguna previa reportada.</Text>
+                    <Text style={styles.readOnlyText}>• Alergias: {history?.allergies?.join(', ') || 'Ninguna'}</Text>
+                    <Text style={styles.readOnlyText}>• Tipo de Sangre: {history?.blood_type || 'Desconocido'}</Text>
+                    <Text style={styles.readOnlyText}>• Condiciones: {history?.chronic_conditions?.join(', ') || 'Ninguna'}</Text>
                 </Accordion>
 
                 {/* 2. Triaje (Read Only) */}
                 <Accordion title="Datos de Triaje" icon={Activity} isOpen={openSections['triage']} onToggle={() => toggleSection('triage')} color="#ea580c">
-                    <View style={styles.grid}>
-                        <View style={styles.statBox}><Text style={styles.statLabel}>Presión</Text><Text style={styles.statValue}>120/80</Text></View>
-                        <View style={styles.statBox}><Text style={styles.statLabel}>Peso</Text><Text style={styles.statValue}>75kg</Text></View>
-                        <View style={styles.statBox}><Text style={styles.statLabel}>Temp</Text><Text style={styles.statValue}>36.5°</Text></View>
-                    </View>
+                    {triage ? (
+                        <View style={styles.grid}>
+                            <View style={styles.statBox}><Text style={styles.statLabel}>Presión</Text><Text style={styles.statValue}>{triage.systolic_pressure}/{triage.diastolic_pressure}</Text></View>
+                            <View style={styles.statBox}><Text style={styles.statLabel}>Peso</Text><Text style={styles.statValue}>{triage.weight_kg}kg</Text></View>
+                            <View style={styles.statBox}><Text style={styles.statLabel}>Temp</Text><Text style={styles.statValue}>{triage.temperature}°</Text></View>
+                        </View>
+                    ) : (
+                        <Text style={{ color: '#94a3b8' }}>No hay datos de triaje recientes.</Text>
+                    )}
                 </Accordion>
 
                 {/* 3. Anamnesis (Editable) */}
@@ -184,25 +265,29 @@ export default function ClinicalCaseDetail({ caseId, patientId, onClose }: any) 
                     <Text style={styles.label}>Enfermedad Actual</Text>
                     <TextInput
                         style={styles.textArea} multiline
-                        value={anamnesis.current_illness}
+                        value={anamnesis.current_illness || ''}
                         onChangeText={t => setAnamnesis({ ...anamnesis, current_illness: t })}
+                        placeholder="Describa la enfermedad actual..."
                     />
                     <Text style={styles.label}>Antecedentes Familiares</Text>
                     <TextInput
                         style={styles.textArea} multiline
-                        value={anamnesis.family_history}
+                        value={anamnesis.family_history || ''}
                         onChangeText={t => setAnamnesis({ ...anamnesis, family_history: t })}
+                        placeholder="Describa antecedentes familiares..."
                     />
-                    <TouchableOpacity style={styles.saveMiniBtn}><Text style={styles.saveMiniText}>Guardar Anamnesis</Text></TouchableOpacity>
+                    <TouchableOpacity style={styles.saveMiniBtn} onPress={saveAnamnesis}>
+                        <Text style={styles.saveMiniText}>Guardar Anamnesis</Text>
+                    </TouchableOpacity>
                 </Accordion>
 
                 {/* 4. Resultados de Laboratorio (Con Tabla JSON) */}
                 <Accordion title="Resultados de Laboratorio" icon={FlaskConical} isOpen={openSections['labs']} onToggle={() => toggleSection('labs')} color="#7c3aed">
-                    {labResults.map((lab) => (
+                    {labResults.length > 0 ? labResults.map((lab) => (
                         <View key={lab.id} style={styles.labCard}>
                             <View style={styles.labHeader}>
                                 <Text style={styles.labType}>{lab.type}</Text>
-                                <Text style={styles.labDate}>{lab.analyzed_at}</Text>
+                                <Text style={styles.labDate}>{new Date(lab.analyzed_at).toLocaleDateString()}</Text>
                             </View>
                             <Text style={styles.labDesc}>{lab.description}</Text>
 
@@ -214,7 +299,9 @@ export default function ClinicalCaseDetail({ caseId, patientId, onClose }: any) 
                                 <Text style={styles.labResultText}>{lab.result_text}</Text>
                             </View>
                         </View>
-                    ))}
+                    )) : (
+                        <Text style={{ color: '#94a3b8' }}>No hay resultados de laboratorio.</Text>
+                    )}
                 </Accordion>
 
                 {/* 5. Evaluación Neurológica (Assessment + AI) */}
@@ -233,7 +320,7 @@ export default function ClinicalCaseDetail({ caseId, patientId, onClose }: any) 
                             <Text style={styles.label}>UHDRS Motor (0-124)</Text>
                             <TextInput
                                 style={styles.input} keyboardType="numeric" placeholder="Ej: 35"
-                                value={neuroAssessment.uhdrs_motor_score}
+                                value={String(neuroAssessment.uhdrs_motor_score || '')}
                                 onChangeText={t => setNeuroAssessment({ ...neuroAssessment, uhdrs_motor_score: t })}
                             />
                         </View>
@@ -241,7 +328,7 @@ export default function ClinicalCaseDetail({ caseId, patientId, onClose }: any) 
                             <Text style={styles.label}>MMSE Cognitivo (0-30)</Text>
                             <TextInput
                                 style={styles.input} keyboardType="numeric" placeholder="Ej: 28"
-                                value={neuroAssessment.mmse_score}
+                                value={String(neuroAssessment.mmse_score || '')}
                                 onChangeText={t => setNeuroAssessment({ ...neuroAssessment, mmse_score: t })}
                             />
                         </View>
@@ -290,12 +377,12 @@ export default function ClinicalCaseDetail({ caseId, patientId, onClose }: any) 
                     <Text style={styles.label}>Diagnóstico Final (Editable)</Text>
                     <TextInput
                         style={[styles.textArea, { height: 100, borderColor: '#0d9488' }]} multiline
-                        value={neuroAssessment.diagnosis}
+                        value={neuroAssessment.diagnosis || ''}
                         onChangeText={t => setNeuroAssessment({ ...neuroAssessment, diagnosis: t })}
                         placeholder="Escriba o seleccione una sugerencia de la IA..."
                     />
 
-                    <TouchableOpacity style={styles.saveBigBtn}>
+                    <TouchableOpacity style={styles.saveBigBtn} onPress={saveNeuroAssessment}>
                         <Save size={24} color="#fff" />
                         <Text style={styles.saveBigText}>Guardar Evaluación Completa</Text>
                     </TouchableOpacity>

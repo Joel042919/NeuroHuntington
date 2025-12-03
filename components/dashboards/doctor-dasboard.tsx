@@ -45,8 +45,8 @@ export default function DoctorDashboard({ profile }: { profile: UserProfile }) {
         .order('scheduled_at', { ascending: true });
 
       if (error) throw error;
-      console.log(profile.id)
-      console.log(data)
+      //console.log(profile.id)
+      //console.log(data)
       // Mapeamos los datos para que coincidan con nuestra interfaz si es necesario
       // Supabase devuelve objetos anidados, que ya coinciden con nuestra interfaz actualizada
       setAppointments(data as any); // Type casting temporal si TS se queja
