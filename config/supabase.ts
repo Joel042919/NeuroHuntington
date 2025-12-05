@@ -4,9 +4,9 @@ import { AppState, Platform } from 'react-native';
 import 'react-native-url-polyfill/auto';
 
 const supabaseURL = process.env.EXPO_PUBLIC_SUPABASE_URL as string;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string;
+const supabaseRoleKey = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY as string;
 
-export const supabase = createClient(supabaseURL, supabaseAnonKey, {
+export const supabase = createClient(supabaseURL, supabaseRoleKey, {
     auth: {
         ...(Platform.OS !== "web" ? { storage: AsyncStorage } : {}),
         autoRefreshToken: true,

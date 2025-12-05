@@ -73,3 +73,27 @@ export interface GeneralConsultation {
     current_illness: string;
     family_history: string;
 }
+
+export interface DoctorSpecialty {
+    id: number;
+    specialty: string;
+    status: boolean;
+}
+
+export interface DoctorDetail {
+    profile_id: string;
+    specialty_id: number;
+    cmp_code: string;
+    available_hours: Record<string, { start_time: string; end_time: string }[]>; // JSONB structure
+    specialty?: DoctorSpecialty; // Join
+    profile?: PatientProfile; // Join (reuse PatientProfile for basic user info)
+}
+
+export interface Notification {
+    id: string;
+    user_id: string;
+    title: string;
+    message: string;
+    is_read: boolean;
+    created_at: string;
+}

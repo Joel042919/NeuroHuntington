@@ -1,29 +1,42 @@
-
-import { ThemedView } from '@/components/themed-view'; // Usando el componente que ya tenías
+import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/context/AuthContext';
 import React from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import DoctorDashboard from '../../components/dashboards/doctor-dasboard';
-import PatientDashboard from '../../components/dashboards/patiend-dashboard';
-
+import { ActivityIndicator, Button, StyleSheet, Text, View } from 'react-native';
+import DoctorDashboard from '../../components/dashboards/doctor-dashboard';
+import NurseDashboard from '../../components/dashboards/nurse-dashboard';
+import PatientDashboard from '../../components/dashboards/patient-dashboard';
+import ReceptionistDashboard from '../../components/dashboards/receptionist-dashboard';
 
 // IDs basados en tu descripción (Asegúrate que coincidan con tu tabla user_role)
-// 1: Admin, 2: Doctor, 3: Paciente, 4: Recepcionista
+// 1: Admin, 2: Doctor, 3: Paciente, 4: Recepcionista, 5:Enfermera
 const ROLES = {
   ADMIN: 1,
   DOCTOR: 2,
   PATIENT: 3,
-  RECEPTIONIST: 4
+  RECEPTIONIST: 4,
+  NURSE: 5
 };
 
 export default function HomeScreen() {
-  const { profile, loading } = useAuth();
+  const { profile, loading, signOut } = useAuth();
 
   // 1. Cargando
-  if (loading || !profile) {
+  if (loading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#2563eb" />
+      </View>
+    );
+  }
+
+  // 1.1. Sin perfil (Error de datos)
+  if (!profile) {
+    return (
+      <View style={styles.center}>
+        <Text style={{ marginBottom: 20, fontSize: 16, color: '#ef4444' }}>
+          No se encontró perfil para este usuario.
+        </Text>
+        <Button title="Cerrar Sesión" onPress={signOut} />
       </View>
     );
   }
@@ -33,14 +46,16 @@ export default function HomeScreen() {
     switch (profile.id_role) {
       case ROLES.DOCTOR:
         return <DoctorDashboard profile={profile} />;
-      
+
       case ROLES.PATIENT:
         return <PatientDashboard profile={profile} />;
-      
+
       case ROLES.RECEPTIONIST:
-        // Puedes crear un componente similar para recepcionista después
-        return <DoctorDashboard profile={profile} />; // Temporalmente usa el de doctor
-        
+        return <ReceptionistDashboard profile={profile} />;
+
+      case ROLES.NURSE:
+        return <NurseDashboard profile={profile} />;
+
       default:
         // Fallback o Admin
         return <PatientDashboard profile={profile} />;

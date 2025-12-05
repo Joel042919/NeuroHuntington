@@ -124,7 +124,7 @@ export default function PatientDashboard({ profile }: { profile: UserProfile }) 
                   {new Date(nextAppointment.scheduled_at).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                 </Text>
                 <Text style={styles.apptDoc}>
-                  Dr. {nextAppointment.doctor.first_name} {nextAppointment.doctor.last_name} ({nextAppointment.type.type})
+                  Dr. {nextAppointment.doctor?.first_name} {nextAppointment.doctor?.last_name} ({nextAppointment.type?.type})
                 </Text>
               </View>
               <ChevronRight color="#94a3b8" />

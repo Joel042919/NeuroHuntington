@@ -1,112 +1,206 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { supabase } from '@/config/supabase';
+import { useAuth } from '@/context/AuthContext';
+import { DoctorDetail } from '@/types/medical';
+import { Badge, Clock, Mail, Stethoscope, User } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+export default function ProfileScreen() {
+  const { profile, loading: authLoading } = useAuth();
+  const [doctorDetail, setDoctorDetail] = useState<DoctorDetail | null>(null);
+  const [loadingDoctor, setLoadingDoctor] = useState(false);
 
-export default function TabTwoScreen() {
+  useEffect(() => {
+    const fetchDoctorDetails = async () => {
+      if (profile?.id_role === 2) { // Doctor
+        setLoadingDoctor(true);
+        const { data, error } = await supabase
+          .from('doctor_details')
+          .select('*, specialty:doctor_specialties(specialty)')
+          .eq('profile_id', profile.id)
+          .single();
+
+        if (data) setDoctorDetail(data);
+        setLoadingDoctor(false);
+      }
+    };
+
+    if (profile) {
+      fetchDoctorDetails();
+    }
+  }, [profile]);
+
+  if (authLoading || loadingDoctor) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#2563eb" />
+      </View>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <View style={styles.center}>
+        <Text>No se encontró el perfil.</Text>
+      </View>
+    );
+  }
+
+  const getRoleLabel = (roleId: number) => {
+    switch (roleId) {
+      case 1: return 'Administrador';
+      case 2: return 'Médico';
+      case 3: return 'Paciente';
+      case 4: return 'Recepcionista';
+      case 5: return 'Enfermera';
+      default: return 'Usuario';
+    }
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+    <ScrollView style={styles.container}>
+      <View style={styles.header}>
+        <View style={styles.avatarContainer}>
+          <User size={60} color="#fff" />
+        </View>
+        <Text style={styles.name}>{profile.first_name} {profile.last_name}</Text>
+        <Text style={styles.role}>{getRoleLabel(profile.id_role)}</Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Información Personal</Text>
+
+        <View style={styles.infoRow}>
+          <Mail size={20} color="#64748b" />
+          <View>
+            <Text style={styles.label}>Email</Text>
+            <Text style={styles.value}>{profile.email}</Text>
+          </View>
+        </View>
+      </View>
+
+      {profile.id_role === 2 && doctorDetail && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Información Profesional</Text>
+
+          <View style={styles.infoRow}>
+            <Stethoscope size={20} color="#2563eb" />
+            <View>
+              <Text style={styles.label}>Especialidad</Text>
+              <Text style={styles.value}>{doctorDetail.specialty?.specialty || 'No especificada'}</Text>
+            </View>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Badge size={20} color="#2563eb" />
+            <View>
+              <Text style={styles.label}>Código CMP</Text>
+              <Text style={styles.value}>{doctorDetail.cmp_code}</Text>
+            </View>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Clock size={20} color="#2563eb" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.label}>Horarios Disponibles</Text>
+              {doctorDetail.available_hours && Object.entries(doctorDetail.available_hours).map(([day, hours]: [string, any]) => (
+                <View key={day} style={styles.scheduleRow}>
+                  <Text style={styles.day}>{day}:</Text>
+                  {hours.map((h: any, i: number) => (
+                    <Text key={i} style={styles.hour}>{h.start_time} - {h.end_time}</Text>
+                  ))}
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  container: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
   },
-  titleContainer: {
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  header: {
+    backgroundColor: '#2563eb',
+    paddingTop: 60,
+    paddingBottom: 30,
+    alignItems: 'center',
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+  },
+  avatarContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  name: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  role: {
+    fontSize: 16,
+    color: '#bfdbfe',
+    fontWeight: '600',
+  },
+  section: {
+    marginTop: 24,
+    paddingHorizontal: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1e293b',
+    marginBottom: 16,
+  },
+  infoRow: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'flex-start',
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    gap: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
   },
+  label: {
+    fontSize: 12,
+    color: '#64748b',
+    marginBottom: 2,
+  },
+  value: {
+    fontSize: 16,
+    color: '#334155',
+    fontWeight: '500',
+  },
+  scheduleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  day: {
+    fontWeight: 'bold',
+    color: '#475569',
+    textTransform: 'capitalize',
+  },
+  hour: {
+    color: '#64748b',
+  }
 });
