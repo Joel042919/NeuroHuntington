@@ -23,6 +23,7 @@ export interface LabResult {
     results_json: Record<string, any>; // Tu JSON dinámico
     result_text: string; // La síntesis
     analyzed_at: string;
+    status: boolean;
 }
 
 export interface NeurologyAssessment {
@@ -66,12 +67,16 @@ export interface TriageRecord {
     temperature: number;
     heart_rate: number;
     oxygen_saturation: number;
+    notes?: string;
 }
 
 export interface GeneralConsultation {
     id: string;
+    reason_consultation?: string;
     current_illness: string;
     family_history: string;
+    pathological_history?: string;
+    physical_exam_notes?: string;
 }
 
 export interface DoctorSpecialty {
