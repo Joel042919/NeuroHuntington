@@ -69,11 +69,11 @@ export default function DoctorDashboard({ profile }: { profile: UserProfile }) {
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         {/* Header Doctor */}
         <View style={styles.header}>
-          <View>
+          <View style={{ flex: 1, paddingRight: 10 }}>
             <Text style={styles.subtitle}>Bienvenido Dr.</Text>
-            <Text style={styles.greeting}>{profile.first_name} {profile.last_name}</Text>
+            <Text style={styles.greeting} numberOfLines={1} adjustsFontSizeToFit>{profile.first_name} {profile.last_name}</Text>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             <View style={styles.badge}>
               <Stethoscope size={16} color="#fff" />
               <Text style={styles.badgeText}>Neurología</Text>

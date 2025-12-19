@@ -63,11 +63,11 @@ export default function PatientDashboard({ profile }: { profile: UserProfile }) 
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header de Bienvenida */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Hola, {profile.first_name}</Text>
+        <View style={{ flex: 1, paddingRight: 10 }}>
+          <Text style={styles.greeting} numberOfLines={1} adjustsFontSizeToFit>Hola, {profile.first_name}</Text>
           <Text style={styles.subtitle}>Tu salud es nuestra prioridad</Text>
         </View>
-        <TouchableOpacity onPress={signOut} style={{ padding: 8 }}>
+        <TouchableOpacity onPress={signOut} style={{ padding: 8, flexShrink: 0 }}>
           <LogOut size={24} color="#ef4444" />
         </TouchableOpacity>
       </View>
