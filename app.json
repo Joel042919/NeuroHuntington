@@ -27,7 +27,15 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "bundler": "metro",
+      "display": "standalone",
+      "startUrl": "/",
+      "themeColor": "#2563eb",
+      "backgroundColor": "#ffffff",
+      "lang": "es",
+      "name": "NeuroHuntington",
+      "shortName": "NeuroHuntington"
     },
     "plugins": [
       "expo-router",
