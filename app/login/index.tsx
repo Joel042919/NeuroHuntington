@@ -2,17 +2,17 @@
 import { Activity, Eye, EyeOff, Lock, User } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-    ActivityIndicator, Alert,
-    KeyboardAvoidingView, Platform,
-    StyleSheet,
-    Text, TextInput, TouchableOpacity,
-    View
+  ActivityIndicator, Alert,
+  KeyboardAvoidingView, Platform,
+  StyleSheet,
+  Text, TextInput, TouchableOpacity,
+  View
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext'; // Importamos nuestro hook
 
 export default function LoginScreen() {
   const { signIn } = useAuth(); // Usamos la función del contexto
-  
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -28,7 +28,7 @@ export default function LoginScreen() {
     try {
       await signIn(email, password);
       // La navegación cambiará automáticamente gracias al AuthContext
-    } catch (error:any) {
+    } catch (error: any) {
       Alert.alert('Falló el inicio de sesión', error.message);
     } finally {
       setLoading(false);
@@ -36,24 +36,24 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
       <View style={styles.content}>
-        
+
         {/* Header / Logo */}
         <View style={styles.header}>
           <View style={styles.logoContainer}>
             <Activity size={32} color="#fff" />
           </View>
-          <Text style={styles.title}>Neuro<Text style={styles.titleHighlight}>Center</Text></Text>
+          <Text style={styles.title}>Neuro<Text style={styles.titleHighlight}>Huntington</Text></Text>
           <Text style={styles.subtitle}>Sistema Especializado Huntington</Text>
         </View>
 
         {/* Formulario */}
         <View style={styles.form}>
-          
+
           {/* Email Input */}
           <View style={styles.inputContainer}>
             <User size={20} color="#94a3b8" style={styles.inputIcon} />
@@ -79,11 +79,11 @@ export default function LoginScreen() {
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
             />
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setShowPassword(!showPassword)}
               style={styles.eyeIcon}
             >
-              {showPassword ? <EyeOff size={20} color="#94a3b8"/> : <Eye size={20} color="#94a3b8"/>}
+              {showPassword ? <EyeOff size={20} color="#94a3b8" /> : <Eye size={20} color="#94a3b8" />}
             </TouchableOpacity>
           </View>
 
@@ -92,8 +92,8 @@ export default function LoginScreen() {
           </TouchableOpacity>
 
           {/* Botón Login */}
-          <TouchableOpacity 
-            style={styles.loginButton} 
+          <TouchableOpacity
+            style={styles.loginButton}
             onPress={handleLogin}
             disabled={loading}
           >
