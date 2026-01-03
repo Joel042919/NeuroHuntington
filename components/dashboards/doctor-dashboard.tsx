@@ -1,10 +1,10 @@
 import { supabase } from '@/config/supabase';
 import { useAuth, UserProfile } from '@/context/AuthContext';
 import { Appointment } from '@/types/medical';
-import { AlertCircle, Calendar, ChevronRight, Clock, LogOut, Stethoscope } from 'lucide-react-native';
+import { AlertCircle, Calendar, Clock, LogOut, MoreVertical, Stethoscope } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import ClinicalCaseDetail from '../doctor/clinicalcasedetail'; // <--- Importamos el detalle
+import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import ClinicalCaseDetail from '../doctor/clinicalcasedetail';
 
 export default function DoctorDashboard({ profile }: { profile: UserProfile }) {
   const { signOut } = useAuth();
@@ -15,6 +15,10 @@ export default function DoctorDashboard({ profile }: { profile: UserProfile }) {
   // Estado para controlar el Modal del Detalle
   const [selectedCase, setSelectedCase] = useState<{ caseId: string, patientId: string } | null>(null);
 
+  // Estado para Modal de Acciones (Web Compatibility)
+  const [actionModalVisible, setActionModalVisible] = useState(false);
+  const [selectedAppt, setSelectedAppt] = useState<{ id: string, status: string } | null>(null);
+
   useEffect(() => {
     fetchAppointments();
   }, []);
@@ -24,32 +28,22 @@ export default function DoctorDashboard({ profile }: { profile: UserProfile }) {
       setLoading(true);
       setError(null);
 
-      // Obtener fecha de hoy en formato ISO (YYYY-MM-DD)
-      const today = new Date().toISOString().split('T')[0];
-
-      // Consulta a Supabase
-      // Asumimos que la tabla se llama 'appointments' y tiene relaciones configuradas
       const { data, error } = await supabase
         .from('appointments')
         .select(`
           id,
           scheduled_at,
           case_id,
+          status,
           type:type_appointment(type),
-          status:appointment_status(appointment_status),
+          status_obj:appointment_status(appointment_status),
           patient:profiles!patient_id(id, first_name, last_name)
         `)
         .eq('doctor_id', profile.id)
-        // .gte('scheduled_at', `${today}T00:00:00`) // Si quieres filtrar por hoy
-        // .lte('scheduled_at', `${today}T23:59:59`)
         .order('scheduled_at', { ascending: true });
 
       if (error) throw error;
-      //console.log(profile.id)
-      //console.log(data)
-      // Mapeamos los datos para que coincidan con nuestra interfaz si es necesario
-      // Supabase devuelve objetos anidados, que ya coinciden con nuestra interfaz actualizada
-      setAppointments(data as any); // Type casting temporal si TS se queja
+      setAppointments(data as any);
 
     } catch (err: any) {
       console.error('Error fetching appointments:', err);
@@ -59,10 +53,36 @@ export default function DoctorDashboard({ profile }: { profile: UserProfile }) {
     }
   };
 
-  // Calcular estadísticas simples
+  const handleUpdateStatus = (apptId: string, currentStatus: string) => {
+    setSelectedAppt({ id: apptId, status: currentStatus });
+    setActionModalVisible(true);
+  };
+
+  const updateStatus = async (id: string, newStatusId: number) => {
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status: newStatusId }) // Corregido: status_id -> status
+        .eq('id', id);
+
+      if (error) throw error;
+
+      if (error) throw error;
+
+      // Alert funciona bien para mensajes simples, pero para menús es mejor Modal en Web
+      Alert.alert("Éxito", "Estado actualizado correctamente.");
+      setActionModalVisible(false); // Cerrar modal
+      fetchAppointments(); // Recargar lista
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Error", "No se pudo actualizar el estado.");
+    }
+  };
+
   const totalAppointments = appointments.length;
-  // Por ahora no tenemos prioridad en la DB, así que simulamos o dejamos en 0
-  const highPriorityCount = 0;
+  // Filtrar citas pendientes/programadas para prioridad
+  // Usamos status_obj porque en el select lo renombramos o accedemos al objeto anidado
+  const pendingCount = appointments.filter(a => (a as any).status_obj?.appointment_status === 'programada').length;
 
   return (
     <>
@@ -89,18 +109,17 @@ export default function DoctorDashboard({ profile }: { profile: UserProfile }) {
           <View style={[styles.statCard, { backgroundColor: '#eff6ff' }]}>
             <Calendar size={24} color="#2563eb" />
             <Text style={[styles.statNumber, { color: '#2563eb' }]}>{totalAppointments}</Text>
-            <Text style={styles.statLabel}>Citas Hoy</Text>
+            <Text style={styles.statLabel}>Total Citas</Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: '#fff7ed' }]}>
             <AlertCircle size={24} color="#ea580c" />
-            <Text style={[styles.statNumber, { color: '#ea580c' }]}>{highPriorityCount}</Text>
-            <Text style={styles.statLabel}>Prioridad Alta</Text>
+            <Text style={[styles.statNumber, { color: '#ea580c' }]}>{pendingCount}</Text>
+            <Text style={styles.statLabel}>Pendientes</Text>
           </View>
         </View>
 
         <Text style={styles.sectionTitle}>Agenda</Text>
 
-        {/* Estado de Carga y Error */}
         {loading && <ActivityIndicator size="large" color="#2563eb" style={{ marginTop: 20 }} />}
 
         {error && (
@@ -116,51 +135,66 @@ export default function DoctorDashboard({ profile }: { profile: UserProfile }) {
         {!loading && !error && appointments.length === 0 && (
           <View style={styles.emptyContainer}>
             <Calendar color="#94a3b8" size={48} />
-            <Text style={styles.emptyText}>No hay citas programadas para hoy.</Text>
+            <Text style={styles.emptyText}>No hay citas programadas.</Text>
           </View>
         )}
 
-        {/* Lista de Citas (Clickable) */}
         <View style={styles.appointmentList}>
           {appointments.map((appt) => {
-            // Formatear hora
             const time = new Date(appt.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            // Accedemos a status_obj, el alias que dimos en el select
+            const statusStr = (appt as any).status_obj?.appointment_status || 'Desconocido';
+
+            const isCompleted = statusStr === 'completado';
+            const isCancelled = statusStr === 'cancelado';
 
             return (
               <TouchableOpacity
                 key={appt.id}
-                style={styles.apptCard}
+                style={[styles.apptCard, isCancelled && { opacity: 0.6 }]}
                 onPress={() => {
                   if (appt.patient?.id) {
                     setSelectedCase({ caseId: appt.case_id, patientId: appt.patient.id });
                   }
                 }}
               >
-                {/* Columna Hora */}
                 <View style={styles.timeColumn}>
                   <Clock size={14} color="#64748b" />
                   <Text style={styles.timeText}>{time}</Text>
                 </View>
 
-                {/* Columna Info */}
                 <View style={styles.infoColumn}>
                   <Text style={styles.patientName}>
                     {appt.patient ? `${appt.patient.first_name} ${appt.patient.last_name}` : 'Paciente desconocido'}
                   </Text>
                   <Text style={styles.apptType}>{appt.type?.type || 'Tipo desconocido'}</Text>
-                  {/* Etiqueta de estado en lugar de prioridad por ahora */}
-                  <View style={[styles.priorityTag, { backgroundColor: '#f1f5f9' }]}>
-                    <Text style={[styles.priorityText, { color: '#64748b' }]}>{appt.status?.appointment_status || 'Estado desconocido'}</Text>
+
+                  <View style={[
+                    styles.priorityTag,
+                    { backgroundColor: isCompleted ? '#dcfce7' : isCancelled ? '#fee2e2' : '#eff6ff' }
+                  ]}>
+                    <Text style={[
+                      styles.priorityText,
+                      { color: isCompleted ? '#166534' : isCancelled ? '#ef4444' : '#2563eb' }
+                    ]}>
+                      {statusStr.toUpperCase()}
+                    </Text>
                   </View>
                 </View>
 
-                <ChevronRight color="#cbd5e1" />
+                {/* Botón de Acción */}
+                <TouchableOpacity
+                  style={{ padding: 8 }}
+                  onPress={() => handleUpdateStatus(appt.id, statusStr)}
+                >
+                  <MoreVertical color="#94a3b8" size={20} />
+                </TouchableOpacity>
               </TouchableOpacity>
             );
           })}
         </View>
 
-        {/* Espacio extra al final */}
         <View style={{ height: 40 }} />
       </ScrollView>
 
@@ -168,7 +202,7 @@ export default function DoctorDashboard({ profile }: { profile: UserProfile }) {
       <Modal
         visible={!!selectedCase}
         animationType="slide"
-        presentationStyle="pageSheet" // Estilo iOS nativo muy bonito
+        presentationStyle="pageSheet"
         onRequestClose={() => setSelectedCase(null)}
       >
         {selectedCase && (
@@ -178,6 +212,42 @@ export default function DoctorDashboard({ profile }: { profile: UserProfile }) {
             onClose={() => setSelectedCase(null)}
           />
         )}
+      </Modal>
+
+      {/* MODAL DE ACCIONES (STATUS) */}
+      <Modal
+        visible={actionModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setActionModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Gestionar Cita</Text>
+            <Text style={styles.modalSubtitle}>Estado actual: {selectedAppt?.status}</Text>
+
+            <TouchableOpacity
+              style={[styles.modalButton, { backgroundColor: '#16a34a' }]}
+              onPress={() => updateStatus(selectedAppt!.id, 1)}
+            >
+              <Text style={styles.modalButtonText}>Marcar Completado</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalButton, { backgroundColor: '#ef4444' }]}
+              onPress={() => updateStatus(selectedAppt!.id, 3)}
+            >
+              <Text style={styles.modalButtonText}>Marcar Cancelado</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalButton, { backgroundColor: '#f1f5f9', marginTop: 8 }]}
+              onPress={() => setActionModalVisible(false)}
+            >
+              <Text style={[styles.modalButtonText, { color: '#64748b' }]}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </>
   );
@@ -217,13 +287,21 @@ const styles = StyleSheet.create({
   patientName: { fontWeight: 'bold', fontSize: 16, color: '#1e293b' },
   apptType: { fontSize: 13, color: '#94a3b8', marginBottom: 4 },
 
-  priorityTag: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fee2e2', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  priorityText: { fontSize: 10, color: '#ef4444', fontWeight: 'bold' },
+  priorityTag: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  priorityText: { fontSize: 10, fontWeight: 'bold' },
 
   errorContainer: { alignItems: 'center', padding: 20, gap: 10 },
   errorText: { color: '#ef4444', textAlign: 'center' },
   retryText: { color: '#2563eb', fontWeight: 'bold' },
 
   emptyContainer: { alignItems: 'center', padding: 40, gap: 10 },
-  emptyText: { color: '#94a3b8', textAlign: 'center' }
+  emptyText: { color: '#94a3b8', textAlign: 'center' },
+
+  // Modal Styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContent: { backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400, gap: 12 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#1e293b', textAlign: 'center' },
+  modalSubtitle: { fontSize: 14, color: '#64748b', textAlign: 'center', marginBottom: 12 },
+  modalButton: { padding: 14, borderRadius: 12, alignItems: 'center' },
+  modalButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 }
 });

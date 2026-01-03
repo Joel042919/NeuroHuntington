@@ -1,13 +1,13 @@
 import { supabase } from '@/config/supabase';
 import { useAuth, UserProfile } from '@/context/AuthContext';
-import { DoctorDetail, DoctorSpecialty, PatientProfile } from '@/types/medical';
-import { Calendar, ChevronLeft, ChevronRight, FilePlus, LogOut } from 'lucide-react-native';
+import { ClinicalCase, DoctorDetail, DoctorSpecialty, PatientProfile } from '@/types/medical';
+import { Calendar, ChevronLeft, ChevronRight, FilePlus, FileText, LogOut, PlusCircle } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function ReceptionistDashboard({ profile }: { profile: UserProfile }) {
     const { signOut } = useAuth();
-    const [view, setView] = useState<'home' | 'new_appointment' | 'new_case'>('home');
+    const [view, setView] = useState<'home' | 'new_appointment' | 'new_case' | 'new_patient'>('home');
 
     // --- ESTADOS PARA NUEVA CITA ---
     const [specialties, setSpecialties] = useState<DoctorSpecialty[]>([]);
@@ -28,9 +28,25 @@ export default function ReceptionistDashboard({ profile }: { profile: UserProfil
     const [patients, setPatients] = useState<PatientProfile[]>([]);
     const [selectedPatient, setSelectedPatient] = useState<PatientProfile | null>(null);
 
+    // Caso Clínico para la cita
+    const [patientCases, setPatientCases] = useState<ClinicalCase[]>([]);
+    const [selectedCase, setSelectedCase] = useState<ClinicalCase | null>(null);
+    const [isCreatingNewCaseForAppt, setIsCreatingNewCaseForAppt] = useState(false);
+    const [newCaseCodeForAppt, setNewCaseCodeForAppt] = useState('');
+    const [loadingCases, setLoadingCases] = useState(false);
+
     // --- ESTADOS PARA NUEVO CASO ---
     const [newCaseCode, setNewCaseCode] = useState('');
     const [creatingCase, setCreatingCase] = useState(false);
+
+    // --- ESTADOS PARA NUEVO PACIENTE ---
+    const [regFirstName, setRegFirstName] = useState('');
+    const [regLastName, setRegLastName] = useState('');
+    const [regDni, setRegDni] = useState('');
+    const [regBirthday, setRegBirthday] = useState(''); // YYYY-MM-DD
+    const [regEmail, setRegEmail] = useState('');
+    const [regPassword, setRegPassword] = useState('');
+    const [creatingPatient, setCreatingPatient] = useState(false);
 
 
     // Cargar Especialidades al inicio
@@ -62,10 +78,6 @@ export default function ReceptionistDashboard({ profile }: { profile: UserProfil
                 `)
                 .eq('specialty_id', selectedSpecialty?.id);
 
-            // Filtro por nombre (básico, Supabase no tiene ILIKE en relaciones anidadas fácilmente sin RPC, 
-            // pero podemos filtrar en cliente o intentar filtrar por ID si tuviéramos búsqueda global)
-            // Para simplificar, traemos los de la especialidad y filtramos en cliente si hay search text
-
             const { data, error } = await query;
             if (error) throw error;
 
@@ -94,14 +106,41 @@ export default function ReceptionistDashboard({ profile }: { profile: UserProfil
             return;
         }
 
-        const { data } = await supabase
+        const { data, error } = await supabase
             .from('profiles')
             .select('*')
             .eq('id_role', 3) // Rol Paciente
             .or(`first_name.ilike.%${text}%,last_name.ilike.%${text}%,dni.ilike.%${text}%`)
             .limit(5);
 
+        if (error) {
+            console.log("Search error:", error);
+        }
         if (data) setPatients(data);
+    };
+
+    // Cargar Casos del Paciente Seleccionado
+    useEffect(() => {
+        if (selectedPatient) {
+            fetchPatientCases();
+        } else {
+            setPatientCases([]);
+            setSelectedCase(null);
+        }
+    }, [selectedPatient]);
+
+    const fetchPatientCases = async () => {
+        if (!selectedPatient) return;
+        setLoadingCases(true);
+        const { data, error } = await supabase
+            .from('clinical_cases')
+            .select('*')
+            .eq('patient_id', selectedPatient.id)
+            .eq('is_active', true);
+
+        if (error) console.error("Error fetching cases:", error);
+        if (data) setPatientCases(data);
+        setLoadingCases(false);
     };
 
     // --- LÓGICA DE CALENDARIO INTELIGENTE ---
@@ -134,7 +173,6 @@ export default function ReceptionistDashboard({ profile }: { profile: UserProfil
             const busyTimes = new Set(existingAppts?.map(a => new Date(a.scheduled_at).toISOString()) || []);
 
             // 2. Generar slots basados en available_hours (JSON)
-            // Estructura esperada: { "Lunes": [{start: "09:00", end: "13:00"}], ... }
             const daysMap: Record<string, number> = { "Domingo": 0, "Lunes": 1, "Martes": 2, "Miercoles": 3, "Jueves": 4, "Viernes": 5, "Sabado": 6 };
             const generatedSlots: { date: Date, time: string }[] = [];
 
@@ -148,7 +186,7 @@ export default function ReceptionistDashboard({ profile }: { profile: UserProfil
                 const diff = dayIndex - currentDayIndex;
                 slotDate.setDate(slotDate.getDate() + diff);
 
-                // Si la fecha es pasada (ayer u hoy antes de hora actual), ignorar (opcional, aquí permitimos agendar futuro)
+                // Si la fecha es pasada (ayer u hoy antes de hora actual), ignorar
                 if (slotDate < new Date(new Date().setHours(0, 0, 0, 0))) return;
 
                 ranges.forEach(range => {
@@ -158,8 +196,6 @@ export default function ReceptionistDashboard({ profile }: { profile: UserProfil
                     // Generar slots de 1 hora
                     while (startHour < endHour) {
                         const timeStr = `${startHour.toString().padStart(2, '0')}:00`;
-
-                        // Crear fecha completa ISO para comparar
                         const slotFullDate = new Date(slotDate);
                         slotFullDate.setHours(startHour, 0, 0, 0);
                         const isoSlot = slotFullDate.toISOString();
@@ -198,44 +234,71 @@ export default function ReceptionistDashboard({ profile }: { profile: UserProfil
             return;
         }
 
+        if (!selectedCase && (!isCreatingNewCaseForAppt || !newCaseCodeForAppt)) {
+            Alert.alert("Faltan datos", "Debe seleccionar un caso clínico existente o crear uno nuevo.");
+            return;
+        }
+
         try {
-            // 1. Crear Cita
+            let finalCaseId = selectedCase?.id;
+
+            // 1. Si está creando caso nuevo, crearlo primero
+            if (isCreatingNewCaseForAppt) {
+                const { data: newCase, error: caseError } = await supabase
+                    .from('clinical_cases')
+                    .insert({
+                        patient_id: selectedPatient.id,
+                        code_case: newCaseCodeForAppt,
+                        status: 1,
+                        is_active: true
+                    })
+                    .select()
+                    .single();
+
+                if (caseError) throw caseError;
+                finalCaseId = newCase.id;
+            }
+
+            if (!finalCaseId) throw new Error("No se pudo determinar el ID del caso clínico");
+
+            // 2. Crear Cita
             const { data: appt, error: apptError } = await supabase
                 .from('appointments')
                 .insert({
                     doctor_id: selectedDoctor.profile_id,
                     patient_id: selectedPatient.id,
+                    case_id: finalCaseId, // Linkeamos el caso
                     scheduled_at: selectedSlot.date.toISOString(),
-                    status: 1, // Pendiente (asumiendo ID 1)
-                    type: 1, // Primera vez (asumiendo ID 1, idealmente seleccionable)
-                    // case_id: null // Se puede vincular si ya tiene caso activo
+                    status: 1, // Pendiente
+                    type: 1, // Primera vez
                 })
                 .select()
                 .single();
 
             if (apptError) throw apptError;
 
-            // 2. Crear Notificación (1 hora antes)
-            const notificationTime = new Date(selectedSlot.date);
-            notificationTime.setHours(notificationTime.getHours() - 1);
-
+            // 3. Crear Notificación
             await supabase.from('notifications').insert({
                 user_id: selectedPatient.id,
                 title: 'Recordatorio de Cita',
                 message: `Tienes una cita con el Dr. ${selectedDoctor.profile?.last_name} mañana a las ${selectedSlot.time}`,
-                created_at: new Date().toISOString() // Simplificado, idealmente un cron job o servicio externo maneja el push real
+                created_at: new Date().toISOString()
             });
 
             Alert.alert("Éxito", "Cita agendada correctamente.");
             setView('home');
-            // Reset states
+
+            // Reset States
             setSelectedDoctor(null);
             setSelectedPatient(null);
             setSelectedSlot(null);
+            setSelectedCase(null);
+            setIsCreatingNewCaseForAppt(false);
+            setNewCaseCodeForAppt('');
 
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            Alert.alert("Error", "No se pudo agendar la cita.");
+            Alert.alert("Error", error.message || "No se pudo agendar la cita.");
         }
     };
 
@@ -249,7 +312,7 @@ export default function ReceptionistDashboard({ profile }: { profile: UserProfil
             const { error } = await supabase.from('clinical_cases').insert({
                 patient_id: selectedPatient.id,
                 code_case: newCaseCode,
-                status: 1, // Activo/Evaluación
+                status: 1,
                 is_active: true
             });
 
@@ -260,11 +323,80 @@ export default function ReceptionistDashboard({ profile }: { profile: UserProfil
             setNewCaseCode('');
         } catch (error) {
             console.error(error);
-            Alert.alert("Error", "No se pudo crear el caso.");
+            Alert.alert("Error", "No se pudo crear el caso. Verifique permisos.");
         } finally {
             setCreatingCase(false);
         }
     };
+
+
+    const handleCreatePatient = async () => {
+        if (!regEmail || !regPassword || !regFirstName || !regLastName || !regDni || !regBirthday) {
+            Alert.alert("Error", "Complete todos los campos, incluyendo fecha de nacimiento.");
+            return;
+        }
+        setCreatingPatient(true);
+        try {
+            const { createClient } = require('@supabase/supabase-js');
+            const tempClient = createClient(
+                process.env.EXPO_PUBLIC_SUPABASE_URL as string,
+                process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY as string,
+                {
+                    auth: {
+                        autoRefreshToken: false,
+                        persistSession: false
+                    }
+                }
+            );
+
+            // Use Admin API to create user
+            const { data: userData, error: authError } = await tempClient.auth.admin.createUser({
+                email: regEmail,
+                password: regPassword,
+                email_confirm: true,
+                user_metadata: {
+                    first_name: regFirstName,
+                    last_name: regLastName,
+                    dni: regDni,
+                    birthday: regBirthday, // Metadata
+                    role: 'patient'
+                }
+            });
+
+            if (authError) throw authError;
+
+            if (userData.user) {
+                const { error: profileError } = await tempClient
+                    .from('profiles')
+                    .upsert({
+                        id: userData.user.id,
+                        first_name: regFirstName,
+                        last_name: regLastName,
+                        dni: regDni,
+                        birthday: regBirthday, // Insert into profile
+                        email: regEmail,
+                        id_role: 3,
+                        role: 'patient'
+                    });
+
+                if (profileError) {
+                    console.log("Profile creation warning:", profileError);
+                }
+            }
+
+            Alert.alert("Éxito", "Paciente registrado correctamente.");
+            setView('home');
+            setRegEmail(''); setRegPassword(''); setRegFirstName(''); setRegLastName(''); setRegDni(''); setRegBirthday('');
+
+        } catch (error: any) {
+            console.error("Create Patient Error:", error);
+            Alert.alert("Error", error.message || "No se pudo registrar al paciente.");
+        } finally {
+            setCreatingPatient(false);
+        }
+    };
+
+    // ...
 
 
     // --- RENDERS ---
@@ -286,7 +418,51 @@ export default function ReceptionistDashboard({ profile }: { profile: UserProfil
                 <Text style={styles.menuTitle}>Nuevo Caso</Text>
                 <Text style={styles.menuDesc}>Abrir expediente para nuevo paciente.</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuCard} onPress={() => setView('new_patient')}>
+                <View style={[styles.iconBg, { backgroundColor: '#fef3c7' }]}>
+                    <FilePlus size={32} color="#d97706" />
+                </View>
+                <Text style={styles.menuTitle}>Registrar Paciente</Text>
+                <Text style={styles.menuDesc}>Crear cuenta para un nuevo paciente.</Text>
+            </TouchableOpacity>
         </View>
+    );
+
+    const renderNewPatient = () => (
+        <ScrollView contentContainerStyle={{ padding: 20 }}>
+            <TouchableOpacity onPress={() => setView('home')} style={styles.backBtn}>
+                <ChevronLeft size={20} color="#64748b" />
+                <Text style={styles.backText}>Volver</Text>
+            </TouchableOpacity>
+            <Text style={styles.pageTitle}>Registrar Nuevo Paciente</Text>
+
+            <Text style={styles.label}>Nombre</Text>
+            <TextInput style={styles.input} value={regFirstName} onChangeText={setRegFirstName} placeholder="Nombres" />
+
+            <Text style={styles.label}>Apellido</Text>
+            <TextInput style={styles.input} value={regLastName} onChangeText={setRegLastName} placeholder="Apellidos" />
+
+            <Text style={styles.label}>DNI</Text>
+            <TextInput style={styles.input} value={regDni} onChangeText={setRegDni} placeholder="Documento de Identidad" keyboardType="numeric" />
+
+            <Text style={styles.label}>Fecha de Nacimiento (YYYY-MM-DD)</Text>
+            <TextInput style={styles.input} value={regBirthday} onChangeText={setRegBirthday} placeholder="Ej: 1990-05-15" />
+
+            <Text style={styles.label}>Correo Electrónico</Text>
+            <TextInput style={styles.input} value={regEmail} onChangeText={setRegEmail} placeholder="correo@ejemplo.com" autoCapitalize="none" keyboardType="email-address" />
+
+            <Text style={styles.label}>Contraseña</Text>
+            <TextInput style={styles.input} value={regPassword} onChangeText={setRegPassword} placeholder="Contraseña segura" secureTextEntry />
+
+            <TouchableOpacity
+                style={[styles.mainButton, creatingPatient && styles.disabledButton]}
+                onPress={handleCreatePatient}
+                disabled={creatingPatient}
+            >
+                {creatingPatient ? <ActivityIndicator color="#fff" /> : <Text style={styles.mainButtonText}>Registrar Paciente</Text>}
+            </TouchableOpacity>
+        </ScrollView>
     );
 
     const renderNewAppointment = () => (
@@ -295,7 +471,7 @@ export default function ReceptionistDashboard({ profile }: { profile: UserProfil
                 <ChevronLeft size={20} color="#64748b" />
                 <Text style={styles.backText}>Volver</Text>
             </TouchableOpacity>
-
+            {/* ... Rest of New Appt Render (unchanged but standardizing header) ... */}
             <Text style={styles.pageTitle}>Agendar Nueva Cita</Text>
 
             {/* 1. Seleccionar Paciente */}
@@ -327,26 +503,83 @@ export default function ReceptionistDashboard({ profile }: { profile: UserProfil
                 )}
             </View>
 
-            {/* 2. Seleccionar Especialidad */}
-            <View style={styles.stepContainer}>
-                <Text style={styles.stepTitle}>2. Especialidad</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
-                    {specialties.map(spec => (
-                        <TouchableOpacity
-                            key={spec.id}
-                            style={[styles.chip, selectedSpecialty?.id === spec.id && styles.chipActive]}
-                            onPress={() => { setSelectedSpecialty(spec); setSelectedDoctor(null); }}
-                        >
-                            <Text style={[styles.chipText, selectedSpecialty?.id === spec.id && styles.chipTextActive]}>{spec.specialty}</Text>
-                        </TouchableOpacity>
-                    ))}
-                </ScrollView>
-            </View>
+            {/* 2. Seleccionar Caso Clínico */}
+            {selectedPatient && (
+                <View style={styles.stepContainer}>
+                    <Text style={styles.stepTitle}>2. Seleccionar Caso Clínico</Text>
 
-            {/* 3. Seleccionar Doctor */}
+                    {loadingCases ? <ActivityIndicator size="small" color="#2563eb" /> : (
+                        <View>
+                            {!isCreatingNewCaseForAppt ? (
+                                <View>
+                                    {patientCases.length > 0 ? (
+                                        <View style={styles.caseList}>
+                                            {patientCases.map(c => (
+                                                <TouchableOpacity
+                                                    key={c.id}
+                                                    style={[styles.caseCard, selectedCase?.id === c.id && styles.caseCardActive]}
+                                                    onPress={() => setSelectedCase(c)}
+                                                >
+                                                    <FileText size={20} color={selectedCase?.id === c.id ? "#2563eb" : "#64748b"} />
+                                                    <Text style={[styles.caseCode, selectedCase?.id === c.id && styles.caseCodeActive]}>
+                                                        {c.code_case}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
+                                    ) : (
+                                        <Text style={styles.noCasesText}>El paciente no tiene casos activos.</Text>
+                                    )}
+
+                                    <TouchableOpacity
+                                        style={styles.newCaseBtn}
+                                        onPress={() => { setIsCreatingNewCaseForAppt(true); setSelectedCase(null); }}
+                                    >
+                                        <PlusCircle size={18} color="#2563eb" />
+                                        <Text style={styles.newCaseBtnText}>Crear Nuevo Caso</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ) : (
+                                <View style={styles.newCaseForm}>
+                                    <Text style={styles.label}>Nuevo Código de Caso:</Text>
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Ej: HD-2024-New"
+                                        value={newCaseCodeForAppt}
+                                        onChangeText={setNewCaseCodeForAppt}
+                                    />
+                                    <TouchableOpacity onPress={() => setIsCreatingNewCaseForAppt(false)}>
+                                        <Text style={styles.cancelLink}>Cancelar y seleccionar existente</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                        </View>
+                    )}
+                </View>
+            )}
+
+            {/* 3. Seleccionar Especialidad */}
+            {(selectedCase || (isCreatingNewCaseForAppt && newCaseCodeForAppt)) && (
+                <View style={styles.stepContainer}>
+                    <Text style={styles.stepTitle}>3. Especialidad</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+                        {specialties.map(spec => (
+                            <TouchableOpacity
+                                key={spec.id}
+                                style={[styles.chip, selectedSpecialty?.id === spec.id && styles.chipActive]}
+                                onPress={() => { setSelectedSpecialty(spec); setSelectedDoctor(null); }}
+                            >
+                                <Text style={[styles.chipText, selectedSpecialty?.id === spec.id && styles.chipTextActive]}>{spec.specialty}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </View>
+            )}
+
+            {/* 4. Seleccionar Doctor */}
             {selectedSpecialty && (
                 <View style={styles.stepContainer}>
-                    <Text style={styles.stepTitle}>3. Seleccionar Doctor</Text>
+                    <Text style={styles.stepTitle}>4. Seleccionar Doctor</Text>
                     <TextInput
                         style={styles.input}
                         placeholder="Filtrar doctores..."
@@ -373,17 +606,15 @@ export default function ReceptionistDashboard({ profile }: { profile: UserProfil
                 </View>
             )}
 
-            {/* 4. Seleccionar Horario */}
+            {/* 5. Seleccionar Horario */}
             {selectedDoctor && (
                 <View style={styles.stepContainer}>
-                    <Text style={styles.stepTitle}>4. Disponibilidad</Text>
-
+                    <Text style={styles.stepTitle}>5. Disponibilidad</Text>
                     <View style={styles.weekControl}>
                         <TouchableOpacity onPress={() => changeWeek(-1)}><ChevronLeft color="#64748b" /></TouchableOpacity>
                         <Text style={styles.weekText}>Semana del {currentWeekStart.toLocaleDateString()}</Text>
                         <TouchableOpacity onPress={() => changeWeek(1)}><ChevronRight color="#64748b" /></TouchableOpacity>
                     </View>
-
                     {loadingSlots ? <ActivityIndicator color="#2563eb" /> : (
                         <View style={styles.slotsGrid}>
                             {availableSlots.length > 0 ? availableSlots.map((slot, idx) => (
@@ -406,9 +637,9 @@ export default function ReceptionistDashboard({ profile }: { profile: UserProfil
             )}
 
             <TouchableOpacity
-                style={[styles.mainButton, (!selectedSlot || !selectedPatient) && styles.disabledButton]}
+                style={[styles.mainButton, (!selectedSlot || !selectedPatient || (!selectedCase && !isCreatingNewCaseForAppt)) && styles.disabledButton]}
                 onPress={handleCreateAppointment}
-                disabled={!selectedSlot || !selectedPatient}
+                disabled={!selectedSlot || !selectedPatient || (!selectedCase && !isCreatingNewCaseForAppt)}
             >
                 <Text style={styles.mainButtonText}>Confirmar Cita</Text>
             </TouchableOpacity>
@@ -416,6 +647,7 @@ export default function ReceptionistDashboard({ profile }: { profile: UserProfil
             <View style={{ height: 50 }} />
         </ScrollView>
     );
+
 
     const renderNewCase = () => (
         <View style={{ padding: 20 }}>
@@ -485,6 +717,7 @@ export default function ReceptionistDashboard({ profile }: { profile: UserProfil
             {view === 'home' && renderHome()}
             {view === 'new_appointment' && renderNewAppointment()}
             {view === 'new_case' && renderNewCase()}
+            {view === 'new_patient' && renderNewPatient()}
         </View>
     );
 }
@@ -543,5 +776,17 @@ const styles = StyleSheet.create({
     disabledButton: { backgroundColor: '#94a3b8', opacity: 0.7 },
     mainButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 
-    label: { fontSize: 14, fontWeight: 'bold', color: '#334155', marginBottom: 8, marginTop: 16 }
+    label: { fontSize: 14, fontWeight: 'bold', color: '#334155', marginBottom: 8, marginTop: 16 },
+
+    // Case Selection Styles
+    caseList: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 10 },
+    caseCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' },
+    caseCardActive: { backgroundColor: '#eff6ff', borderColor: '#2563eb' },
+    caseCode: { marginLeft: 8, fontWeight: '600', color: '#64748b' },
+    caseCodeActive: { color: '#1e40af' },
+    noCasesText: { color: '#94a3b8', fontStyle: 'italic', marginBottom: 10 },
+    newCaseBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, backgroundColor: '#f0f9ff', borderRadius: 8, borderWidth: 1, borderColor: '#bae6fd', borderStyle: 'dashed' },
+    newCaseBtnText: { color: '#0369a1', fontWeight: 'bold' },
+    newCaseForm: { backgroundColor: '#f8fafc', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' },
+    cancelLink: { color: '#ef4444', fontSize: 12, marginTop: 8, textDecorationLine: 'underline' }
 });

@@ -122,3 +122,23 @@ export interface Notification {
     is_read: boolean;
     created_at: string;
 }
+
+export interface PrescriptionDetail {
+    id: number;
+    id_prescripcion: string;
+    medication_name: string;
+    dosage: string;
+    frequency: string;
+    duration: string;
+    indications: string;
+    created_at: string;
+}
+
+export interface Prescription {
+    id: string;
+    case_id: string;
+    doctor_id: string;
+    doctor?: { first_name: string; last_name: string }; // View model
+    created_at: string;
+    details?: PrescriptionDetail[]; // Join
+}
